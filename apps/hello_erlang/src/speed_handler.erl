@@ -54,6 +54,7 @@ write_to_file([H | T], File) ->
 %======================================================================================================
 
 init([]) ->
+  process_flag(trap_exit, true),
   {ok, []}.
 
 handle_call(_Request, _From, State) ->
@@ -62,8 +63,9 @@ handle_call(_Request, _From, State) ->
 handle_cast(Data, State) ->
   handle_data(jsone:encode(Data), State).
 
-handle_info(_Info, State) ->
-  {noreply, State}.
+handle_info(Info, State) ->
+  io:fwrite("handle_info called: ~p~n~p~n", [Info, State]),
+  handle_trapped_exit(Info, State).
 
 terminate(_Reason, _State) ->
   ok.
@@ -75,32 +77,34 @@ code_change(_OldVsn, State, _Extra) ->
 % Internal functions
 %======================================================================================================
 
+handle_trapped_exit({'EXIT', Pid, _Reason}, [{Pid, _StartTime}, _Size]) -> % We remove current Pid
+  {noreply, []};
+handle_trapped_exit({'EXIT', _Pid, _Reason}, State) -> % All other cases we just keep the State
+  {noreply, State}.
+
 handle_data(Data, []) ->
   {ok, {Pid, StartTime}} = start_cache(Data),
   {noreply, [{Pid, StartTime}, iolist_size([Data])]};
 handle_data(Data, [{Pid, StartTime}, Size]) ->
-  handle_ongoing_cache(Data, {Pid, StartTime}, iolist_size([Data]) + Size, is_expired(StartTime), is_process_alive(Pid)).
+  handle_ongoing_cache(Data, {Pid, StartTime}, iolist_size([Data]) + Size, is_expired(StartTime)).
 
 start_cache(Data) ->
-  Pid = spawn(?MODULE, loop, [[]]),
+  Pid = spawn_link(?MODULE, loop, [[]]),
   Pid ! {cache, Data},
   timer:apply_after(timer:seconds(?TIMEOUT), ?MODULE, send_timeout, [Pid]),
   io:fwrite("spawned process: ~p~n", [Pid]),
   {ok, {Pid, erlang:system_time(millisecond)}}.
 
-handle_ongoing_cache(Data, {OldPid, _StartTime}, _, true, _) ->
+handle_ongoing_cache(Data, {OldPid, _StartTime}, _, true) -> % expired we let the old process self terminate
   io:fwrite("expired process: ~p~n", [OldPid]),
   {ok, {Pid, StartTime}} = start_cache(Data),
   {noreply, [{Pid, StartTime}, iolist_size([Data])]};
-handle_ongoing_cache(Data, {OldPid, _StartTime}, _, _, false) ->
-  io:fwrite("process timed out: ~p~n", [OldPid]),
-  {ok, {Pid, StartTime}} = start_cache(Data),
-  {noreply, [{Pid, StartTime}, iolist_size([Data])]};
-handle_ongoing_cache(Data, {Pid, _StartTime}, Size, _, _) when Size > ?MAXSIZE ->
+handle_ongoing_cache(Data, {Pid, _StartTime}, Size, _) when Size > ?MAXSIZE ->
   io:fwrite("handle request size reached limit: ~p~n", [Size]),
+  % We send the last data
   Pid ! {eof, Data},
   {noreply, []};
-handle_ongoing_cache(Data, {Pid, StartTime}, Size, _, _) ->
+handle_ongoing_cache(Data, {Pid, StartTime}, Size, _) ->
   io:fwrite("keep going Pid: ~p Size: ~p~n", [Pid, Size]),
   Pid ! {cache, Data},
   {noreply, [{Pid, StartTime}, Size]}.
