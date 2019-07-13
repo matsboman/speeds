@@ -1,0 +1,16 @@
+{application, hello_erlang,
+ [{description, "Hello Erlang!"},
+  {vsn, "0.1.0"},
+  {registered, []},
+  {mod, {hello_erlang_app, []}},
+  {applications,
+   [kernel,
+    stdlib,
+    cowboy
+   ]},
+  {env,[]},
+  {modules, []},
+  {maintainers, []},
+  {licenses, ["Apache 2.0"]},
+  {links, []}
+ ]}.
