@@ -42,7 +42,7 @@ send_timeout(Pid) ->
 
 write_to_file(DataList) ->
   {ok, File} = file:open("speeds." ++ utc_time(), [write]),
-  lists:map(fun(Line) ->
+  lists:foreach(fun(Line) ->
     io:format(File, "~s~n", [binary_to_list(Line)])
             end, DataList),
   file:close(File).
