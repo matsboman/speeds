@@ -30,10 +30,11 @@ loop(DataList) ->
     {cache, Data} ->
       loop([Data | DataList]);
     {eof, Data} ->
-      flush_data(lists:reverse([Data | DataList]));
+      io:fwrite("eof received~n", []),
+      flush_data([Data | DataList]);
     timeout ->
       io:fwrite("timeout received~n", []),
-      flush_data(lists:reverse(DataList))
+      flush_data(DataList)
   end.
 
 send_timeout(Pid) ->
@@ -41,13 +42,10 @@ send_timeout(Pid) ->
 
 write_to_file(DataList) ->
   {ok, File} = file:open("speeds." ++ utc_time(), [write]),
-  write_to_file(DataList, File).
-write_to_file([], File) ->
-  file:close(File),
-  ok;
-write_to_file([H | T], File) ->
-  io:format(File, "~s~n", [binary_to_list(H)]),
-  write_to_file(T, File).
+  lists:map(fun(Line) ->
+    io:format(File, "~s~n", [binary_to_list(Line)])
+            end, DataList),
+  file:close(File).
 
 %======================================================================================================
 % gen_server stuff
@@ -110,9 +108,9 @@ handle_ongoing_cache(Data, {Pid, StartTime}, Size, _) ->
   {noreply, [{Pid, StartTime}, Size]}.
 
 flush_data(DataList) ->
-  io:fwrite("writing batch to interface: ~p~n", [DataList]),
+  io:fwrite("writing batch to interface...~n", []),
   %% Handle writing in its own process
-  spawn(?MODULE, write_to_file, [DataList]).
+  spawn(?MODULE, write_to_file, [lists:reverse(DataList)]).
 
 utc_time() ->
   calendar:system_time_to_rfc3339(erlang:system_time(millisecond),
