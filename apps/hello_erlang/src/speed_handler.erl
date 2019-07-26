@@ -22,16 +22,16 @@
 -spec start_link() -> {ok, pid()}.
 start_link() ->
   io:fwrite("start_link speed_handler...~n", []),
-  gen_server:start_link(?MODULE, [], []).
+  gen_server:start_link({local, speed_handler}, ?MODULE, [], []).
 
 loop(DataList) ->
   io:fwrite("loop: ~p~n", [DataList]),
   receive
     {cache, Data} ->
       loop([Data | DataList]);
-    {eof, Data} ->
+    eof ->
       io:fwrite("eof received~n", []),
-      flush_data([Data | DataList]);
+      flush_data(DataList);
     timeout ->
       io:fwrite("timeout received~n", []),
       flush_data(DataList)
@@ -97,11 +97,11 @@ handle_ongoing_cache(Data, {OldPid, _StartTime}, _, true) -> % expired we let th
   io:fwrite("expired process: ~p~n", [OldPid]),
   {ok, {Pid, StartTime}} = start_cache(Data),
   {noreply, [{Pid, StartTime}, iolist_size([Data])]};
-handle_ongoing_cache(Data, {Pid, _StartTime}, Size, _) when Size > ?MAXSIZE ->
-  io:fwrite("handle request size reached limit: ~p~n", [Size]),
-  % We send the last data
-  Pid ! {eof, Data},
-  {noreply, []};
+handle_ongoing_cache(Data, {Pid, _StartTime}, Size, _) when Size >= ?MAXSIZE ->
+  io:fwrite("handle request size reached limit we start new cache ~p~n", [Size]),
+  Pid ! eof,
+  {ok, {NewPid, NewStartTime}} = start_cache(Data),
+  {noreply, [{NewPid, NewStartTime}, iolist_size([Data])]};
 handle_ongoing_cache(Data, {Pid, StartTime}, Size, _) ->
   io:fwrite("keep going Pid: ~p Size: ~p~n", [Pid, Size]),
   Pid ! {cache, Data},

@@ -29,6 +29,4 @@ handle_request(_, Req0, State) ->
   {ok, Reply, State}.
 
 cast_to_worker(Body) ->
-  [{ch3, Pid, worker, [ch3]}] =
-    supervisor:which_children(hello_erlang_sup),
-  gen_server:cast(Pid, Body).
+  gen_server:cast(speed_handler, Body).
